@@ -11,9 +11,44 @@
 ################################################################################
 
 
+from collections.abc import Mapping
+
+from ._utils import cpp_signature
+
+
+def _json_object_to_string(obj):
+    import json
+
+    def make_json_serializable(value):
+        if isinstance(value, Mapping):
+            return {key: make_json_serializable(val) for key, val in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [make_json_serializable(item) for item in value]
+        return value
+
+    try:
+        return json.dumps(make_json_serializable(obj), separators=(",", ":"))
+    except TypeError as exc:
+        raise TypeError(
+            "RooFit HS3 JSON import from Python mappings requires JSON-serializable values."
+        ) from exc
+
+
 class RooJSONFactoryWSTool(object):
 
     __cpp_name__ = 'RooJSONFactoryWSTool'
+
+    @cpp_signature(
+        [
+            "bool RooJSONFactoryWSTool::importJSON(std::string const& filename);",
+            "bool RooJSONFactoryWSTool::importJSON(std::istream& is);",
+        ]
+    )
+    def importJSON(self, source):
+        """Import HS3 JSON from a filename, stream, or Python mapping."""
+        if isinstance(source, Mapping):
+            return self.importJSONfromString(_json_object_to_string(source))
+        return self._importJSON(source)
 
     @classmethod
     def gendoc(cls):

@@ -722,9 +722,82 @@ class TestRooJSONFactoryWSTool(unittest.TestCase):
     Test for RooJSONFactoryWSTool pythonizations.
     """
 
+    @staticmethod
+    def _minimal_hs3(var_name="x", value=1.0):
+        return {
+            "metadata": {"hs3_version": "0.2"},
+            "domains": [
+                {
+                    "name": "default_domain",
+                    "type": "product_domain",
+                    "axes": [{"name": var_name, "min": 0.0, "max": 10.0}],
+                }
+            ],
+            "parameter_points": [
+                {
+                    "name": "default_values",
+                    "parameters": [{"name": var_name, "value": value}],
+                }
+            ],
+        }
+
     def test_writedoc(self):
 
         ROOT.RooJSONFactoryWSTool.writedoc("roojsonfactorywstool_test_writedoc.tex")
+
+    def test_import_json_from_mapping(self):
+        import collections
+
+        hs3 = collections.UserDict(self._minimal_hs3(value=2.0))
+
+        ws = ROOT.RooWorkspace("ws")
+        tool = ROOT.RooJSONFactoryWSTool(ws)
+
+        self.assertTrue(tool.importJSON(hs3))
+        self.assertEqual(ws["x"].GetName(), "x")
+        self.assertEqual(ws["x"].getMin(), 0.0)
+        self.assertEqual(ws["x"].getMax(), 10.0)
+        self.assertEqual(ws["x"].getVal(), 2.0)
+
+    def test_import_json_from_mutated_exported_mapping(self):
+        import json
+
+        ws_input = ROOT.RooWorkspace("ws_input")
+        ws_input["x"] = {"min": 0.0, "max": 10.0}
+        ws_input["mean"] = {"value": 1.0, "min": -5.0, "max": 5.0}
+        ws_input["sigma"] = {"value": 2.0, "min": 0.1, "max": 10.0}
+        ws_input["gauss"] = {"type": "gaussian_dist", "x": "x", "mean": "mean", "sigma": "sigma"}
+
+        hs3 = json.loads(ROOT.RooJSONFactoryWSTool(ws_input).exportJSONtoString())
+        for parameter in hs3["parameter_points"][0]["parameters"]:
+            if parameter["name"] == "mean":
+                parameter["value"] = 4.0
+
+        ws_output = ROOT.RooWorkspace("ws_output")
+        self.assertTrue(ROOT.RooJSONFactoryWSTool(ws_output).importJSON(hs3))
+        self.assertEqual(ws_output["mean"].getVal(), 4.0)
+        self.assertEqual(ws_output["gauss"].getMean(), ws_output["mean"])
+
+    def test_import_json_from_filename_still_works(self):
+        import json
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "workspace.json")
+            with open(path, "w") as outfile:
+                json.dump(self._minimal_hs3(value=3.0), outfile)
+
+            ws = ROOT.RooWorkspace("ws")
+            self.assertTrue(ROOT.RooJSONFactoryWSTool(ws).importJSON(path))
+            self.assertEqual(ws["x"].getVal(), 3.0)
+
+    def test_import_json_from_mapping_requires_json_serializable_values(self):
+        ws = ROOT.RooWorkspace("ws")
+        tool = ROOT.RooJSONFactoryWSTool(ws)
+
+        with self.assertRaisesRegex(TypeError, "JSON-serializable"):
+            tool.importJSON({"metadata": {"hs3_version": object()}})
 
 
 class TestRooLinkedList(unittest.TestCase):

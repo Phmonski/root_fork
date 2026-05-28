@@ -9,7 +9,10 @@
 ################################################################################
 
 
+from collections.abc import Mapping
+
 from ._utils import _kwargs_to_roocmdargs, cpp_signature
+from ._roojsonfactorywstool import _json_object_to_string
 
 
 class RooWorkspace(object):
@@ -67,15 +70,13 @@ class RooWorkspace(object):
                     + key
                     + " another instance with same name already in the workspace and no conflict resolution protocol specified"
                 )
-        elif isinstance(value, dict):
-            import json
-
+        elif isinstance(value, Mapping):
             import ROOT
 
-            json_string = json.dumps(value, separators=(",", ":"))
+            json_string = _json_object_to_string(value)
             ROOT.RooJSONFactoryWSTool(self).importJSONElement(key, json_string)
         else:
-            raise TypeError("Object of type 'str' or 'dict' expected but " + type(value) + " was given")
+            raise TypeError("Object of type 'str' or 'Mapping' expected but " + type(value).__name__ + " was given")
 
     @cpp_signature(
         [
